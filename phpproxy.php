@@ -1,12 +1,8 @@
 <?php
 /**
- * Created by PhpStorm.
- * User: abcdlzy
- * Date: 14/12/3
- * Time: 下午6:13
- *
- * build on https://github.com/cowboy/php-simple-proxy/
  */
+
+
 class DataTransport
 {
     public static $response="";
@@ -105,10 +101,10 @@ class DataTransport
             }
 
             // Propagate headers to response.
-           /* foreach ( $header_text as $header ) {
-                header( $header );
-            }
-*/
+            /* foreach ( $header_text as $header ) {
+                 header( $header );
+             }
+ */
             return $contents;
 
         } else {
@@ -172,4 +168,52 @@ class DataTransport
         return self::$response;
     }
 }
+
+
+
+
+
+
+
+@$URL=$_REQUEST['url'];
+
+
+if(!empty($URL))
+{
+
+    $postArray=array();
+
+//文件处理
+    if(!empty($_FILES)){
+        foreach($_FILES as $key=>$value){
+            move_uploaded_file($value['tmp_name'], $value['name']);
+            $postArray[$key]='@'.realpath($value['name']);
+        }
+    }
+
+//处理POST数据
+    foreach($_POST as $key=>$value){
+            $postArray[$key]=$value;
+    }
+
+//获取数据
+    DataTransport::go($URL,$postArray);
+
+//处理数据
+    foreach ( preg_split( '/[\r\n]+/', DataTransport::$header ) as $headertext  ) {
+        header( $headertext );
+    }
+    print(DataTransport::$response);
+
+//删除临时文件
+    if(!empty($_FILES)){
+        foreach($_FILES as $key=>$value){
+            unlink($value['name']);
+        }
+    }
+} else{
+    echo 'url为空';
+}
+
+
 ?>
