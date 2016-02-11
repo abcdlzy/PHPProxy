@@ -38,7 +38,7 @@ class DataTransport
         // 替换 http绝对引用 为 本网址的相对引用
         $http_abs_ref = 'href="' . $_SERVER['PHP_SELF'] . '?url=http';
         $response = preg_replace('/href=\"http/i', $http_abs_ref , $response);
-
+        $response = preg_replace('/src=\"http/i', $http_abs_ref , $response);
         return $response;
     }
     public static function go($url, $postdata='',$mode="native")
