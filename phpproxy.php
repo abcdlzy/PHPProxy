@@ -3,6 +3,7 @@
  */
 
 
+
 class DataTransport
 {
     public static $response="";
@@ -19,6 +20,27 @@ class DataTransport
     public static $CURL_full_headers="1";
     public static $CURL_full_status='1';
 
+    public static function hook_url($url,$response) {
+        $hook_target = $_SERVER['PHP_SELF'] . '?url=';
+        $hook_origin_url = $hook_target;
+        $hook_form_target = $hook_target;
+        // 获取当前url的根地址
+        $hook_url_temp = $url;
+        while($hook_url_temp[strlen($hook_url_temp) - 1] != '/' && $hook_url_temp != '') {
+            $hook_url_temp = substr($hook_url_temp,0,strlen($hook_url_temp) - 1);
+        }
+        $hook_target = $hook_target . $hook_url_temp;
+
+        // 替换基本的 / 根引用 成本网址的根引用
+        $response = preg_replace('/href=\"\//is', 'href="' . $hook_target , $response);
+        $response = preg_replace('/src=\"\//is', 'src="' . $hook_target , $response);
+        $response = preg_replace("/url\('\//is", 'url(\'' . $hook_target , $response);
+        // 替换 http绝对引用 为 本网址的相对引用
+        $http_abs_ref = 'href="' . $_SERVER['PHP_SELF'] . '?url=http';
+        $response = preg_replace('/href=\"http/i', $http_abs_ref , $response);
+
+        return $response;
+    }
     public static function go($url, $postdata='',$mode="native")
     {
         if(function_exists("curl_init")){
@@ -50,11 +72,12 @@ class DataTransport
         } else {
             $ch = curl_init( $url );
 
+            // 设置post数据
             if ( $postdata!=null ) {
                 curl_setopt( $ch, CURLOPT_POST, true );
                 @curl_setopt( $ch, CURLOPT_POSTFIELDS, $postdata );
             }
-
+            // 设置cookie数据
             if ( self::$CURL_SendCookie ) {
                 $cookie = array();
                 foreach ( $_COOKIE as $key => $value ) {
@@ -72,12 +95,14 @@ class DataTransport
             curl_setopt($ch, CURLOPT_BINARYTRANSFER,true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, array("Expect:"));
             curl_setopt($ch, CURLOPT_HEADER, true);
+            curl_setopt($ch, CURLOPT_HTTP_VERSION, '1.0'); // 使用 Http1.0 避免chunked
+            curl_setopt($ch, CURLOPT_TIMEOUT, 60); // 设置超时
 
             curl_setopt( $ch, CURLOPT_USERAGENT, self::$CURL_user_agent ? self::$CURL_user_agent : @$_SERVER['HTTP_USER_AGENT'] );
 
             $getresponse = curl_exec($ch);
-
             list( $header, $contents ) = preg_split( '/([\r\n][\r\n])\\1/', $getresponse, 2 );
+
 
 
             if (curl_getinfo($ch, CURLINFO_HTTP_CODE) == '200') {
@@ -170,12 +195,10 @@ class DataTransport
 }
 
 
-
-
-
-
+ob_start();
 
 @$URL=$_REQUEST['url'];
+
 
 
 if(!empty($URL))
@@ -200,9 +223,12 @@ if(!empty($URL))
     DataTransport::go($URL,$postArray);
 
 //处理数据
+
     foreach ( preg_split( '/[\r\n]+/', DataTransport::$header ) as $headertext  ) {
-        header( $headertext );
+        header($headertext);
     }
+//Hook所有url
+    DataTransport::$response = DataTransport::hook_url($URL, DataTransport::$response);
     print(DataTransport::$response);
 
 //删除临时文件
@@ -215,5 +241,6 @@ if(!empty($URL))
     echo 'url为空';
 }
 
+ob_end_flush();
 
 ?>
