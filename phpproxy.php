@@ -41,6 +41,13 @@ class DataTransport
         $response = preg_replace('/src=\"http/i', $http_abs_ref , $response);
         return $response;
     }
+
+    public static function fix_request_url($url){
+        $url=preg_replace('/http:\/\/\//i','http://',$url);
+        $url=preg_replace('/https:\/\/\//i','https://',$url);
+        return $url;
+    }
+
     public static function go($url, $postdata='',$mode="native")
     {
         if(function_exists("curl_init")){
@@ -200,10 +207,10 @@ ob_start();
 @$URL=$_REQUEST['url'];
 
 
-
 if(!empty($URL))
 {
-
+    //处理出现https:///或者http:///的问题，不是根本解决办法，有点偷懒
+    $URL=DataTransport::fix_request_url($URL);
     $postArray=array();
 
 //文件处理
@@ -225,7 +232,13 @@ if(!empty($URL))
 //处理数据
 
     foreach ( preg_split( '/[\r\n]+/', DataTransport::$header ) as $headertext  ) {
-        header($headertext);
+
+        //处理因为Content-Security-Policy而导致的资源不能加载的情况
+        $pos = strpos($headertext, 'Content-Security-Policy');
+        if ($pos === false) {
+            header($headertext);
+        }
+
     }
 //Hook所有url
     DataTransport::$response = DataTransport::hook_url($URL, DataTransport::$response);
