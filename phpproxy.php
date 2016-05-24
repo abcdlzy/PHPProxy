@@ -31,6 +31,14 @@ class DataTransport
         }
         $hook_target = $hook_target . $hook_url_temp;
 
+        //解决因为例如https://github.com后面没有加/而导致的hook路径错误问题
+        preg_match("~^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?~i", $url, $matches);
+
+        @$checkrooturl=$hook_url_temp.$matches[4];
+        if(@$checkrooturl==$url){
+            $hook_target = $hook_target . $matches[4].'/';
+        }
+
         // 替换基本的 / 根引用 成本网址的根引用
         $response = preg_replace('/href=\"\//is', 'href="' . $hook_target , $response);
         $response = preg_replace('/src=\"\//is', 'src="' . $hook_target , $response);
