@@ -21,32 +21,64 @@ class DataTransport
     public static $CURL_full_status='1';
 
     public static function hook_url($url,$response) {
-        $hook_target = $_SERVER['PHP_SELF'] . '?url=';
-        $hook_origin_url = $hook_target;
-        $hook_form_target = $hook_target;
-        // 获取当前url的根地址
-        $hook_url_temp = $url;
-        while($hook_url_temp[strlen($hook_url_temp) - 1] != '/' && $hook_url_temp != '') {
-            $hook_url_temp = substr($hook_url_temp,0,strlen($hook_url_temp) - 1);
-        }
-        $hook_target = $hook_target . $hook_url_temp;
+        //解决因为请求资源而导致的异常
+        if(strpos($url, '.css')||strpos($url, '.js')){
+            // 获取当前url的根地址
+            $hook_url_temp = $_SERVER['HTTP_REFERER'];
+            while($hook_url_temp[strlen($hook_url_temp) - 1] != '/' && $hook_url_temp != '') {
+                $hook_url_temp = substr($hook_url_temp,0,strlen($hook_url_temp) - 1);
+            }
+            $hook_target = $hook_url_temp;
 
-        //解决因为例如https://github.com后面没有加/而导致的hook路径错误问题
-        preg_match("~^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?~i", $url, $matches);
+            //解决因为例如https://github.com后面没有加/而导致的hook路径错误问题
+            preg_match("~^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?~i", $url, $urlmatches);
 
-        @$checkrooturl=$hook_url_temp.$matches[4];
-        if(@$checkrooturl==$url){
-            $hook_target = $hook_target . $matches[4].'/';
+            @$checkrooturl=$hook_url_temp.$urlmatches[4];
+            if(@$checkrooturl==$url){
+                $hook_target = $hook_target . $urlmatches[4].'/';
+            }
+
         }
+        else
+        {
+            $hook_target =$_SERVER['PHP_SELF'] . '?url=';
+            // 获取当前url的根地址
+            $hook_url_temp = $url;
+            while($hook_url_temp[strlen($hook_url_temp) - 1] != '/' && $hook_url_temp != '') {
+                $hook_url_temp = substr($hook_url_temp,0,strlen($hook_url_temp) - 1);
+            }
+            $hook_target = $hook_target . $hook_url_temp;
+
+            //解决因为例如https://github.com后面没有加/而导致的hook路径错误问题
+            preg_match("~^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?~i", $url, $urlmatches);
+
+            @$checkrooturl=$hook_url_temp.$urlmatches[4];
+            if(@$checkrooturl==$url){
+                $hook_target = $hook_target . $urlmatches[4].'/';
+            }
+
+        }
+
+        //因为需要篡改页面，所以需要去除integrity的限定
+        $response = preg_replace('/integrity=(\'|\")\S*(\'|\")/i', '' , $response);
+
 
         // 替换基本的 / 根引用 成本网址的根引用
+
+        $response = preg_replace('/href=\'\//is', 'href=\'' . $hook_target , $response);
         $response = preg_replace('/href=\"\//is', 'href="' . $hook_target , $response);
+        $response = preg_replace('/src=\'\//is', 'src=\'' . $hook_target , $response);
         $response = preg_replace('/src=\"\//is', 'src="' . $hook_target , $response);
         $response = preg_replace("/url\('\//is", 'url(\'' . $hook_target , $response);
+        $response = preg_replace('/url\(\"\//is', 'url("' . $hook_target , $response);
         // 替换 http绝对引用 为 本网址的相对引用
-        $http_abs_ref = 'href="' . $_SERVER['PHP_SELF'] . '?url=http';
-        $response = preg_replace('/href=\"http/i', $http_abs_ref , $response);
-        $response = preg_replace('/src=\"http/i', $http_abs_ref , $response);
+        $http_abs_ref =  $_SERVER['PHP_SELF'] . '?url=http';
+        $response = preg_replace('/content=\'http/i', 'content="' .$http_abs_ref , $response);
+        $response = preg_replace('/content=\"http/i', 'content="' .$http_abs_ref , $response);
+        $response = preg_replace('/href=\'http/i', 'href="' .$http_abs_ref , $response);
+        $response = preg_replace('/src=\'http/i','src="' . $http_abs_ref , $response);
+        $response = preg_replace('/href=\"http/i', 'href="' .$http_abs_ref , $response);
+        $response = preg_replace('/src=\"http/i', 'src="' .$http_abs_ref , $response);
         return $response;
     }
 
