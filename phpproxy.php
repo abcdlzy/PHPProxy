@@ -155,7 +155,7 @@ class DataTransport
             if (curl_getinfo($ch, CURLINFO_HTTP_CODE) == '200') {
                 $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
                 self::$header = substr($getresponse, 0, $headerSize);
-                Self::$response = substr($getresponse, $headerSize);
+                self::$response = substr($getresponse, $headerSize);
             }
 
             $status = curl_getinfo( $ch );
