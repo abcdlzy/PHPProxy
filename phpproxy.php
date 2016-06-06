@@ -2,25 +2,19 @@
 /**
  */
 
-
-
-class DataTransport
+class Tamper
 {
-    public static $response="";
-    public static $header="";
-    public static $errMsg="";
-    public static $CURL_enable_jsonp    = false;
-    public static $CURL_enable_native   = true;
-    public static $CURL_valid_url_regex = '/.*/';
-    public static $CURL_SendCookie="";
-    public static $CURL_SendSession="";
-    public static $CURL_mode="native";
-    public static $CURL_CallBack="";
-    public static $CURL_user_agent="";
-    public static $CURL_full_headers="1";
-    public static $CURL_full_status='1';
+    //开启图像变为base64可以修复由于浏览器的安全设定而导致的css url限制问题，但是可能会带来巨大的延时
+    public static $enable_image_to_base64=true;
+
+    public static function get_image_to_base64($url){
+
+    }
+
 
     public static function hook_url($url,$response) {
+        $protocol = (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == '443') ? 'https://' : 'http://';
+
         //解决因为请求资源而导致的异常
         if(strpos($url, '.css')||strpos($url, '.js')){
             // 获取当前url的根地址
@@ -63,22 +57,28 @@ class DataTransport
         $response = preg_replace('/integrity=(\'|\")\S*(\'|\")/i', '' , $response);
 
 
-        // 替换基本的 / 根引用 成本网址的根引用
+        //解决<img src="//www.baidu.com/img/baidu_jgylogo3.gif"/>，实在想不出怎么解决比较好了，涉及替换顺序问题
+        //然后计划先换成其他字符，避免被后面的正则再次替换。
+        $response = preg_replace('/=\'\/\//is', '！！！replace1！！！' , $response);
+        $response = preg_replace('/=\"\/\//is', '！！！replace2！！！' , $response);
 
-        $response = preg_replace('/href=\'\//is', 'href=\'' . $hook_target , $response);
-        $response = preg_replace('/href=\"\//is', 'href="' . $hook_target , $response);
-        $response = preg_replace('/src=\'\//is', 'src=\'' . $hook_target , $response);
-        $response = preg_replace('/src=\"\//is', 'src="' . $hook_target , $response);
+        // 替换基本的 / 根引用 成本网址的根引用
+        $response = preg_replace('/=\'\//is', '=\'' . $hook_target , $response);
+        $response = preg_replace('/=\"\//is', '="' . $hook_target , $response);
         $response = preg_replace("/url\('\//is", 'url(\'' . $hook_target , $response);
         $response = preg_replace('/url\(\"\//is', 'url("' . $hook_target , $response);
+
+
         // 替换 http绝对引用 为 本网址的相对引用
         $http_abs_ref =  $_SERVER['PHP_SELF'] . '?url=http';
-        $response = preg_replace('/content=\'http/i', 'content="' .$http_abs_ref , $response);
-        $response = preg_replace('/content=\"http/i', 'content="' .$http_abs_ref , $response);
-        $response = preg_replace('/href=\'http/i', 'href="' .$http_abs_ref , $response);
-        $response = preg_replace('/src=\'http/i','src="' . $http_abs_ref , $response);
-        $response = preg_replace('/href=\"http/i', 'href="' .$http_abs_ref , $response);
-        $response = preg_replace('/src=\"http/i', 'src="' .$http_abs_ref , $response);
+
+        $response = preg_replace('/=\'http/i', '="' .$http_abs_ref , $response);
+        $response = preg_replace('/=\"http/i', '="' .$http_abs_ref , $response);
+
+
+        $response = preg_replace('/！！！replace1！！！/is', '=\'' . $_SERVER['PHP_SELF'] . '?url='.$protocol , $response);
+        $response = preg_replace('/！！！replace2！！！/is', '="' . $_SERVER['PHP_SELF'] . '?url='.$protocol , $response);
+
         return $response;
     }
 
@@ -88,29 +88,49 @@ class DataTransport
         return $url;
     }
 
-    public static function go($url, $postdata='',$mode="native")
+}
+
+class DataTransport
+{
+    public $response="";
+    public $header="";
+    public $errMsg="";
+    public $CURL_enable_jsonp    = false;
+    public $CURL_enable_native   = true;
+    public $CURL_valid_url_regex = '/.*/';
+    public $CURL_SendCookie="";
+    public $CURL_SendSession="";
+    public $CURL_mode="native";
+    public $CURL_CallBack="";
+    public $CURL_user_agent="";
+    public $CURL_full_headers="1";
+    public $CURL_full_status='1';
+
+
+
+    public function go($url, $postdata='',$mode="native")
     {
         if(function_exists("curl_init")){
-            return self::Post_CURL($url, $postdata,$mode);
+            return $this->Post_CURL($url, $postdata,$mode);
         }
         else
         {
-            return self::Post_FILE_GET_CONTENTS($url, $postdata);
+            return $this->Post_FILE_GET_CONTENTS($url, $postdata);
         }
     }
 
-    private static function Post_CURL($url, $postdata=null,$mode="native"){
-        self::$errMsg="";
+    private function Post_CURL($url, $postdata=null,$mode="native"){
+        $this->errMsg="";
 
-        self::$response="";
-        self::$header="";
+        $this->response="";
+        $this->header="";
         if ( !$url ) {
 
             // Passed url not specified.
             $contents = 'ERROR: url not specified';
             $status = array( 'http_code' => 'ERROR' );
 
-        } else if ( !preg_match( self::$CURL_valid_url_regex, $url ) ) {
+        } else if ( !preg_match( $this->CURL_valid_url_regex, $url ) ) {
 
             // Passed url doesn't match $valid_url_regex.
             $contents = 'ERROR: invalid url';
@@ -125,12 +145,12 @@ class DataTransport
                 @curl_setopt( $ch, CURLOPT_POSTFIELDS, $postdata );
             }
             // 设置cookie数据
-            if ( self::$CURL_SendCookie ) {
+            if ($this->CURL_SendCookie ) {
                 $cookie = array();
                 foreach ( $_COOKIE as $key => $value ) {
                     $cookie[] = $key . '=' . $value;
                 }
-                if ( self::$CURL_SendSession ) {
+                if ( $this->CURL_SendSession ) {
                     $cookie[] = SID;
                 }
                 $cookie = implode( '; ', $cookie );
@@ -145,7 +165,7 @@ class DataTransport
             curl_setopt($ch, CURLOPT_HTTP_VERSION, '1.0'); // 使用 Http1.0 避免chunked
             curl_setopt($ch, CURLOPT_TIMEOUT, 60); // 设置超时
 
-            curl_setopt( $ch, CURLOPT_USERAGENT, self::$CURL_user_agent ? self::$CURL_user_agent : @$_SERVER['HTTP_USER_AGENT'] );
+            curl_setopt( $ch, CURLOPT_USERAGENT, $this->CURL_user_agent ? $this->CURL_user_agent : @$_SERVER['HTTP_USER_AGENT'] );
 
             $getresponse = curl_exec($ch);
             list( $header, $contents ) = preg_split( '/([\r\n][\r\n])\\1/', $getresponse, 2 );
@@ -154,8 +174,8 @@ class DataTransport
 
             if (curl_getinfo($ch, CURLINFO_HTTP_CODE) == '200') {
                 $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-                self::$header = substr($getresponse, 0, $headerSize);
-                self::$response = substr($getresponse, $headerSize);
+                $this->header = substr($getresponse, 0, $headerSize);
+                $this->response = substr($getresponse, $headerSize);
             }
 
             $status = curl_getinfo( $ch );
@@ -167,7 +187,7 @@ class DataTransport
         $header_text = preg_split( '/[\r\n]+/', $header );
 
         if ( $mode == 'native') {
-            if ( !self::$CURL_enable_native) {
+            if ( !$this->CURL_enable_native) {
                 $contents = 'ERROR: invalid mode';
                 $status = array( 'http_code' => 'ERROR' );
             }
@@ -179,13 +199,15 @@ class DataTransport
  */
             return $contents;
 
-        } else {
+        }
+        else
+        {
 
             // $data will be serialized into JSON data.
             $data = array();
 
             // Propagate all HTTP headers into the JSON data object.
-            if (self::$CURL_full_headers) {
+            if ($this->CURL_full_headers) {
                 $data['headers'] = array();
 
                 foreach ( $header_text as $header ) {
@@ -197,7 +219,7 @@ class DataTransport
             }
 
             // Propagate all cURL request / response info to the JSON data object.
-            if ( self::$CURL_full_status) {
+            if ( $this->CURL_full_status) {
                 $data['status'] = $status;
             } else {
                 $data['status'] = array();
@@ -213,7 +235,7 @@ class DataTransport
             header( 'Content-type: application/' . ( $is_xhr ? 'json' : 'x-javascript' ) );
 
             // Get JSONP callback.
-            $jsonp_callback = self::$CURL_enable_jsonp && isset(self::$CURL_CallBack) ? self::$CURL_CallBack : null;
+            $jsonp_callback = $this->CURL_enable_jsonp && isset($this->CURL_CallBack) ? $this->CURL_CallBack : null;
 
             // Generate JSON/JSONP string
             $json = json_encode( $data );
@@ -223,8 +245,7 @@ class DataTransport
         }
     }
 
-
-    private static function Post_FILE_GET_CONTENTS($url, $post = null)
+    private function Post_FILE_GET_CONTENTS($url, $post = null)
     {
         $context = array();
         if (is_array($post)) {
@@ -236,21 +257,25 @@ class DataTransport
                 'content' => http_build_query($post, '', '&'),
             );
         }
-        self::$response=file_get_contents($url, false, stream_context_create($context));
-        return self::$response;
+        $this->response=file_get_contents($url, false, stream_context_create($context));
+        return $this->response;
     }
+
 }
 
 
 ob_start();
+
+
 
 @$URL=$_REQUEST['url'];
 
 
 if(!empty($URL))
 {
+    $dataTransport=new DataTransport();
     //处理出现https:///或者http:///的问题，不是根本解决办法，有点偷懒
-    $URL=DataTransport::fix_request_url($URL);
+    $URL=Tamper::fix_request_url($URL);
     $postArray=array();
 
 //文件处理
@@ -267,11 +292,11 @@ if(!empty($URL))
     }
 
 //获取数据
-    DataTransport::go($URL,$postArray);
+    $dataTransport->go($URL,$postArray);
 
 //处理数据
 
-    foreach ( preg_split( '/[\r\n]+/', DataTransport::$header ) as $headertext  ) {
+    foreach ( preg_split( '/[\r\n]+/', $dataTransport->header ) as $headertext  ) {
 
         //处理因为Content-Security-Policy而导致的资源不能加载的情况
         $pos = strpos($headertext, 'Content-Security-Policy');
@@ -281,8 +306,8 @@ if(!empty($URL))
 
     }
 //Hook所有url
-    DataTransport::$response = DataTransport::hook_url($URL, DataTransport::$response);
-    print(DataTransport::$response);
+    $dataTransport->response = Tamper::hook_url($URL, $dataTransport->response);
+    print($dataTransport->response);
 
 //删除临时文件
     if(!empty($_FILES)){
@@ -290,6 +315,7 @@ if(!empty($URL))
             unlink($value['name']);
         }
     }
+
 } else{
     echo 'url为空';
 }
