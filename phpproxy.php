@@ -4,15 +4,32 @@
 
 class Tamper
 {
-    //开启图像变为base64可以修复由于浏览器的安全设定而导致的css url限制问题，但是可能会带来巨大的延时
-    public static $enable_image_to_base64=true;
+    //开启图像变为base64
+    public static $enable_image_to_base64=false;
 
-    public static function get_image_to_base64($url){
+    public static function get_image_to_base64DataUrl($url){
+        $imageData=new DataTransport();
+        $imageData->go($url);
+        @preg_match_all('/Content-Type:(.*?)[\r\n]+/is',$imageData->header,$contentTypeMatch);
 
+        return 'data:'.$contentTypeMatch[1][0].';base64, '.base64_encode($imageData->response);
     }
 
+    private static function endWith($source, $checkstr) {
 
-    public static function hook_url($url,$response) {
+        $length = strlen($checkstr);
+        if($length == 0)
+        {
+            return true;
+        }
+        return (substr($source, -$length) === $checkstr);
+    }
+
+    private static function startWith($source,$checkstr){
+        return strpos($source, $checkstr) === 0;
+    }
+
+    public static function hook($url,$response) {
         $protocol = (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == '443') ? 'https://' : 'http://';
 
         //解决因为请求资源而导致的异常
@@ -22,14 +39,14 @@ class Tamper
             while($hook_url_temp[strlen($hook_url_temp) - 1] != '/' && $hook_url_temp != '') {
                 $hook_url_temp = substr($hook_url_temp,0,strlen($hook_url_temp) - 1);
             }
-            $hook_target = $hook_url_temp;
 
-            //解决因为例如https://github.com后面没有加/而导致的hook路径错误问题
-            preg_match("~^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?~i", $url, $urlmatches);
-
-            @$checkrooturl=$hook_url_temp.$urlmatches[4];
-            if(@$checkrooturl==$url){
-                $hook_target = $hook_target . $urlmatches[4].'/';
+            if(Tamper::endWith($hook_url_temp,"://"))
+            {
+                $hook_target=$_SERVER['HTTP_REFERER'].'/';
+            }
+            else
+            {
+                $hook_target = $hook_url_temp;
             }
 
         }
@@ -53,6 +70,13 @@ class Tamper
 
         }
 
+        if(Tamper::$enable_image_to_base64) {
+            $response = preg_replace('/background-image:url/is', '！！！replacebgimgurl！！！', $response);
+            $response = preg_replace('/background:url/is', '！！！replacebgurl！！！', $response);
+        }
+
+
+
         //因为需要篡改页面，所以需要去除integrity的限定
         $response = preg_replace('/integrity=(\'|\")\S*(\'|\")/i', '' , $response);
 
@@ -72,12 +96,45 @@ class Tamper
         // 替换 http绝对引用 为 本网址的相对引用
         $http_abs_ref =  $_SERVER['PHP_SELF'] . '?url=http';
 
-        $response = preg_replace('/=\'http/i', '="' .$http_abs_ref , $response);
+        $response = preg_replace('/=\'http/i', '=\'' .$http_abs_ref , $response);
         $response = preg_replace('/=\"http/i', '="' .$http_abs_ref , $response);
 
 
         $response = preg_replace('/！！！replace1！！！/is', '=\'' . $_SERVER['PHP_SELF'] . '?url='.$protocol , $response);
         $response = preg_replace('/！！！replace2！！！/is', '="' . $_SERVER['PHP_SELF'] . '?url='.$protocol , $response);
+
+        if(Tamper::$enable_image_to_base64)
+        {
+            $response = preg_replace('/！！！replacebgurl！！！/is', 'background:url' , $response);
+            $response = preg_replace('/！！！replacebgimgurl！！！/is', 'background-image:url' , $response);
+            parse_str(parse_url($hook_target)['query'],$refererUrlParse);
+            $refererUrl=$refererUrlParse['url'];
+            preg_match_all('/background:url(\("|\(\'|\()(.*?)("\)|\'\)|\))/is',$response,$bgMatchs);
+            preg_match_all('/background-image:url(\("|\(\'|\()(.*?)("\)|\'\)|\))/is',$response,$bgimageMatchs);
+            $images=array_merge($bgMatchs[2],$bgimageMatchs[2]);
+            // start with /
+            $parse_url_refererUrl=parse_url($refererUrl);
+            $refererRootUrl=$parse_url_refererUrl['scheme'].'://'.$parse_url_refererUrl['host'].(array_key_exists('port',$parse_url_refererUrl)?(':'.$parse_url_refererUrl['port']):'');
+            foreach($images as $imageurl){
+                $readImgUrl='';
+                //处理以/开始的url
+                if(Tamper::startWith($imageurl,'/')){
+                    $readImgUrl=$refererRootUrl.$imageurl;
+                }
+                else{
+                    $readImgUrl=$refererUrl.$imageurl;
+                }
+                $imgDataBase64=Tamper::get_image_to_base64DataUrl($readImgUrl);
+
+                //替换字符串需要处理不标准的写法，如没有使用‘或者“
+                if(strpos($response,'background-image:url('.$imageurl.')')){
+                    $response = str_replace($imageurl, '"'.$imgDataBase64.'"' , $response);
+                }
+                else{
+                    $response = str_replace($imageurl, $imgDataBase64, $response);
+                }
+            }
+        }
 
         return $response;
     }
@@ -306,7 +363,7 @@ if(!empty($URL))
 
     }
 //Hook所有url
-    $dataTransport->response = Tamper::hook_url($URL, $dataTransport->response);
+    $dataTransport->response = Tamper::hook($URL, $dataTransport->response);
     print($dataTransport->response);
 
 //删除临时文件
@@ -317,7 +374,7 @@ if(!empty($URL))
     }
 
 } else{
-    echo 'url为空';
+    echo 'url null';
 }
 
 ob_end_flush();
