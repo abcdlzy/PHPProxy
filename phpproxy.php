@@ -70,6 +70,31 @@ class Tamper
 
         }
 
+
+        //URLENCODE！！！
+
+        preg_match_all('/=("|\')[\/]{1,2}(.*?)("|\')/is',$response,$urlMatchs);
+        $pageUrlArray=$urlMatchs[2];
+        preg_match_all('/=("|\')http(.*?)("|\')/is',$response,$urlMatchs);
+        $pageUrlArray=array_merge($pageUrlArray,$urlMatchs[2]);;
+        preg_match_all('/url(\("|\(\'|\()(.*?)("\)|\'\)|\))/is',$response,$urlMatchs);
+        $pageUrlArray=array_merge($pageUrlArray,$urlMatchs[2]);;
+
+        if(!empty($pageUrlArray)){
+            //解决某些相同的短字符串匹配后，影响后面比它更长的字符串的匹配
+            $pageUrlArrayElementsLengthArray=array();
+            foreach($pageUrlArray as $nowPageUrl){
+                array_push($pageUrlArrayElementsLengthArray,strlen($nowPageUrl));
+            }
+
+            array_multisort($pageUrlArrayElementsLengthArray,SORT_DESC,SORT_NUMERIC,$pageUrlArray);
+
+            foreach($pageUrlArray as $pageUrl){
+                $response = str_replace($pageUrl, urlencode($pageUrl) , $response);
+            }
+        }
+
+
         if(Tamper::$enable_image_to_base64) {
             $response = preg_replace('/background-image:url/is', '！！！replacebgimgurl！！！', $response);
             $response = preg_replace('/background:url/is', '！！！replacebgurl！！！', $response);
@@ -346,6 +371,13 @@ if(!empty($URL))
 //处理POST数据
     foreach($_POST as $key=>$value){
             $postArray[$key]=$value;
+    }
+
+//处理GET
+    foreach($_REQUEST as $key => $val){
+        if($key!=='url'){
+            $URL.='&'.$key.'='.$val;
+        }
     }
 
 //获取数据
