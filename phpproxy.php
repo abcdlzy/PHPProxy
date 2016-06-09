@@ -75,10 +75,12 @@ class Tamper
 
         preg_match_all('/=("|\')[\/]{1,2}(.*?)("|\')/is',$response,$urlMatchs);
         $pageUrlArray=$urlMatchs[2];
+        preg_match_all('/href=("|\')(.*?)("|\')/is',$response,$urlMatchs);
+        $pageUrlArray=array_merge($pageUrlArray,$urlMatchs[2]);
         preg_match_all('/=("|\')http(.*?)("|\')/is',$response,$urlMatchs);
-        $pageUrlArray=array_merge($pageUrlArray,$urlMatchs[2]);;
+        $pageUrlArray=array_merge($pageUrlArray,$urlMatchs[2]);
         preg_match_all('/url(\("|\(\'|\()(.*?)("\)|\'\)|\))/is',$response,$urlMatchs);
-        $pageUrlArray=array_merge($pageUrlArray,$urlMatchs[2]);;
+        $pageUrlArray=array_merge($pageUrlArray,$urlMatchs[2]);
 
         if(!empty($pageUrlArray)){
             //解决某些相同的短字符串匹配后，影响后面比它更长的字符串的匹配
@@ -90,7 +92,10 @@ class Tamper
             array_multisort($pageUrlArrayElementsLengthArray,SORT_DESC,SORT_NUMERIC,$pageUrlArray);
 
             foreach($pageUrlArray as $pageUrl){
-                $response = str_replace($pageUrl, urlencode($pageUrl) , $response);
+                //解决错误替换了VIEWSTATE的问题,用于验证是否是比较合法的url
+                if(strpos($pageUrl,'.')){
+                    $response = str_replace($pageUrl, urlencode($pageUrl) , $response);
+                }
             }
         }
 
@@ -105,28 +110,39 @@ class Tamper
         //因为需要篡改页面，所以需要去除integrity的限定
         $response = preg_replace('/integrity=(\'|\")\S*(\'|\")/i', '' , $response);
 
-
-        //解决<img src="//www.baidu.com/img/baidu_jgylogo3.gif"/>，实在想不出怎么解决比较好了，涉及替换顺序问题
-        //然后计划先换成其他字符，避免被后面的正则再次替换。
+        //计划先换成其他字符，避免被后面的正则再次替换。
+        $response = preg_replace('/=\'http/i', '！！！replacehttp1！！！' , $response);
+        $response = preg_replace('/=\"http/i', '！！！replacehttp2！！！', $response);
         $response = preg_replace('/=\'\/\//is', '！！！replace1！！！' , $response);
         $response = preg_replace('/=\"\/\//is', '！！！replace2！！！' , $response);
+        $response = preg_replace('/=\'.\//is', '！！！replacedot1！！！' , $response);
+        $response = preg_replace('/=\".\//is', '！！！replacedot2！！！' , $response);
+        $response = preg_replace('/href=\'/is', '！！！replacehref1！！！' , $response);
+        $response = preg_replace('/href="/is', '！！！replacehref2！！！' , $response);
+
+
 
         // 替换基本的 / 根引用 成本网址的根引用
+
         $response = preg_replace('/=\'\//is', '=\'' . $hook_target , $response);
         $response = preg_replace('/=\"\//is', '="' . $hook_target , $response);
         $response = preg_replace("/url\('\//is", 'url(\'' . $hook_target , $response);
         $response = preg_replace('/url\(\"\//is', 'url("' . $hook_target , $response);
 
-
         // 替换 http绝对引用 为 本网址的相对引用
         $http_abs_ref =  $_SERVER['PHP_SELF'] . '?url=http';
 
-        $response = preg_replace('/=\'http/i', '=\'' .$http_abs_ref , $response);
-        $response = preg_replace('/=\"http/i', '="' .$http_abs_ref , $response);
+        $response = preg_replace('/！！！replacehttp1！！！/is', '=\'' .$http_abs_ref , $response);
+        $response = preg_replace('/！！！replacehttp2！！！/is', '="' .$http_abs_ref , $response);
 
 
         $response = preg_replace('/！！！replace1！！！/is', '=\'' . $_SERVER['PHP_SELF'] . '?url='.$protocol , $response);
         $response = preg_replace('/！！！replace2！！！/is', '="' . $_SERVER['PHP_SELF'] . '?url='.$protocol , $response);
+        $response = preg_replace('/！！！replacedot1！！！/is', '=\'' . $hook_target , $response);
+        $response = preg_replace('/！！！replacedot2！！！/is', '="' . $hook_target , $response);
+        $response = preg_replace('/！！！replacehref1！！！/is', 'href=\'' . $hook_target , $response);
+        $response = preg_replace('/！！！replacehref2！！！/is', 'href="' . $hook_target , $response);
+
 
         if(Tamper::$enable_image_to_base64)
         {
