@@ -1,3 +1,5 @@
+看情况来维护此项目，推荐使用regeorg https://github.com/sensepost/reGeorg
+
 # PHPProxy 
 ##using
 phpproxy.php?url=https://github.com
