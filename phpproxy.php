@@ -180,9 +180,23 @@ class Tamper
         return $response;
     }
 
+    /**
+     * update : 2018-04-14 12:36:34
+     * 改了一下 fix_request_url 的逻辑, 测试参考 test/url_format.php
+     * 使用必须要求 url 是由 http/https 开头
+     * 
+     * @$url 输入参数
+     * @return 如果格式化成功返回 http[s]://prefix.domainname.org/req/page.html
+     */
     public static function fix_request_url($url){
-        $url=preg_replace('/http:\/\/\//i','http://',$url);
-        $url=preg_replace('/https:\/\/\//i','https://',$url);
+        // $url=preg_replace('/http:\/\/\//i','http://',$url);
+        // $url=preg_replace('/https:\/\/\//i','https://',$url);
+        // return $url;
+        if (empty($url)) return '';
+        $url_detail = array();
+        $url = urldecode($url);
+        if (!preg_match('/^(https|http):\/{0,}(.*)$/', $url, $url_detail) || count($url_detail) != 3) return '';
+        $url = $url_detail[1] . '://' . preg_replace('/\/{2,}/', '/', $url_detail[2]);
         return $url;
     }
 
